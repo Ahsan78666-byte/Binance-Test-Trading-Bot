@@ -87,10 +87,10 @@ while True:
 
         # Your buy and sell conditions
         def buy_condition():
-            if df['close'].iloc[-1] <= 0.986 * df['lower_band'].iloc[-1]:
+            if df['close'].iloc[-1] <= 0.982 * df['lower_band'].iloc[-1]:
                 return True
             else:
-                print(f"Wick Condition: {0.986 * df['lower_band'].iloc[-1]}")
+                print(f"Wick Condition: {0.982 * df['lower_band'].iloc[-1]}")
                 print("Buy condition not met")
             return False
           
@@ -126,7 +126,7 @@ while True:
                 if lot_size_filter:
                     # Extract the step size and precision from the filter
                     quantity_step_size = float(lot_size_filter['stepSize'])
-                    max_precision = len(lot_size_filter['maxQty'].split('.')[1])
+                    max_precision = len(lot_size_filter['minQty'].split('.')[1])
 
                     # Calculate the quantity based on available USDT balance
                     solusdt_ticker = client.get_symbol_ticker(symbol='SOLUSDT')
@@ -178,7 +178,7 @@ while True:
                     if lot_size_filter:
                         # Extract the step size and precision from the filter
                         quantity_step_size = float(lot_size_filter['stepSize'])
-                        max_precision = len(lot_size_filter['maxQty'].split('.')[1])
+                        max_precision = len(lot_size_filter['minQty'].split('.')[1])
 
                         # Calculate the quantity based on available balance
                         sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
@@ -210,8 +210,15 @@ while True:
                         print("LOT_SIZE filter not found in symbol info.")
 
         # Sleep for a while (you can adjust the interval)
-        print(f"{Fore.BLUE}Sleeping for 0 seconds{Style.RESET_ALL}")
-        time.sleep(0)  # Sleep for 0 seconds                    
+        print(f"{Fore.BLUE}Sleeping for 1 seconds{Style.RESET_ALL}")
+        time.sleep(1)  # Sleep for 1 seconds                    
+
+    except Exception as e:
+        print("Error:", e)
+
+
+
+                   
 
     except Exception as e:
         print("Error:", e)

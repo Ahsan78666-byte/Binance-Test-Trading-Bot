@@ -79,18 +79,26 @@ while True:
 
         df = bollinger_bands_strategy(df)
 
+        # Calculate EMA 21
+        df['ema_21'] = df['close'].ewm(span=21, adjust=False).mean()
+
         # Retrieve free USDT balance
         free_usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
 
         # Your buy and sell conditions
         def buy_condition():
             current_price = df['close'].iloc[-1]
-            current_volume = df['volume'].iloc[-1]
-            if current_price <= 0.982 * df['lower_band'].iloc[-1] and current_volume > 200000:
+            lower_band = df['lower_band'].iloc[-1]
+            open_price = df['open'].iloc[-1]
+            ema_21 = df['ema_21'].iloc[-1]
+            
+            # Print values for debugging
+            print(f"Open: {open_price}, EMA 21: {ema_21}")
+            
+            if open_price < ema_21 and current_price <= 0.982 * lower_band:
                 return True
             else:
-                print(f"Wick Condition: {0.982 * df['lower_band'].iloc[-1]}")
-                print(f"Current Volume: {current_volume}")
+                print(f"Lower Band Condition: {0.982 * lower_band}")
                 print("Buy condition not met")
             return False
 

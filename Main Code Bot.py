@@ -79,8 +79,8 @@ while True:
 
         df = bollinger_bands_strategy(df)
 
-        # Calculate EMA 21
-        df['ema_21'] = df['close'].ewm(span=21, adjust=False).mean()
+        # Calculate EMA 100
+        df['ema_100'] = df['close'].ewm(span=100, adjust=False).mean()
 
         # Retrieve free USDT balance
         free_usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
@@ -90,12 +90,12 @@ while True:
             current_price = df['close'].iloc[-1]
             lower_band = df['lower_band'].iloc[-1]
             open_price = df['open'].iloc[-1]
-            ema_21 = df['ema_21'].iloc[-1]
+            ema_100 = df['ema_100'].iloc[-1]
             
             # Print values for debugging
-            print(f"Open: {open_price}, EMA 21: {ema_21}")
+            print(f"Open: {open_price}, EMA 100: {ema_100}")
             
-            if open_price < ema_21 and current_price <= 0.982 * lower_band:
+            if open_price < ema_100 and current_price <= 0.982 * lower_band:
                 return True
             else:
                 print(f"Lower Band Condition: {0.982 * lower_band}")
@@ -134,7 +134,7 @@ while True:
                 if lot_size_filter:
                     # Extract the step size and precision from the filter
                     quantity_step_size = float(lot_size_filter['stepSize'])
-                    max_precision = len(lot_size_filter['minQty'].split('.')[1])
+                    max_precision = len(lot_size_filter['maxQty'].split('.')[1])
 
                     # Calculate the quantity based on available USDT balance
                     solusdt_ticker = client.get_symbol_ticker(symbol='SOLUSDT')
@@ -187,7 +187,7 @@ while True:
                     if lot_size_filter:
                         # Extract the step size and precision from the filter
                         quantity_step_size = float(lot_size_filter['stepSize'])
-                        max_precision = len(lot_size_filter['minQty'].split('.')[1])
+                        max_precision = len(lot_size_filter['maxQty'].split('.')[1])
 
                         # Calculate the quantity based on available balance
                         sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
@@ -224,6 +224,11 @@ while True:
 
     except Exception as e:
         print("Error:", e)
+
+
+
+
+
 
 
 

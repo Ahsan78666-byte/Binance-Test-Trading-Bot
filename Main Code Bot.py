@@ -35,6 +35,22 @@ testing_mode = False
 # Initialize historical data
 historical_data = []
 
+# Define the minimum notional value required by Binance
+MIN_NOTIONAL = 10  # Example value, you should check the actual value from the exchange
+
+def get_min_notional(symbol):
+    symbol_info = client.get_symbol_info(symbol)
+    notional_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'MIN_NOTIONAL'), None)
+    if notional_filter:
+        return float(notional_filter['minNotional'])
+    else:
+        raise Exception("MIN_NOTIONAL filter not found for symbol")
+
+def adjust_quantity_to_min_notional(quantity, price, min_notional):
+    if quantity * price < min_notional:
+        quantity = min_notional / price
+    return quantity
+
 while True:
     try:
         # Fetch candlestick data for the trading pair
@@ -148,6 +164,10 @@ while True:
                     # Adjust the quantity to match the maximum allowed precision
                     quantity_to_buy = round(quantity_to_buy, max_precision)
 
+                    # Adjust the quantity to meet the minimum notional value
+                    min_notional = get_min_notional(symbol)
+                    quantity_to_buy = adjust_quantity_to_min_notional(quantity_to_buy, current_sol_price, min_notional)
+
                     print("Executing Buy Order")
                     # Place a real buy order here
                     order = client.create_order(
@@ -224,7 +244,6 @@ while True:
 
     except Exception as e:
         print("Error:", e)
-
 
 
 

@@ -26,7 +26,7 @@ timeframe = '15m'
 # Initialize buy_price as None
 buy_price = None
 
-# Initialize sell_price as None
+# Initialize sell price variable
 sell_price = None
 
 # Set to True for testing, False for live trading
@@ -35,29 +35,13 @@ testing_mode = False
 # Initialize historical data
 historical_data = []
 
-# Define the minimum notional value required by Binance
-MIN_NOTIONAL = 10  # Example value, you should check the actual value from the exchange
-
-def get_min_notional(symbol):
-    symbol_info = client.get_symbol_info(symbol)
-    notional_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'MIN_NOTIONAL'), None)
-    if notional_filter:
-        return float(notional_filter['minNotional'])
-    else:
-        raise Exception("MIN_NOTIONAL filter not found for symbol")
-
-def adjust_quantity_to_min_notional(quantity, price, min_notional):
-    if quantity * price < min_notional:
-        quantity = min_notional / price
-    return quantity
-
 while True:
     try:
         # Fetch candlestick data for the trading pair
-        klines = client.get_historical_klines(symbol=symbol, interval=timeframe, limit=24)
+        klines = client.get_historical_klines(symbol=symbol, interval=timeframe, limit=124)  # Fetch previous candles
 
         # Extract the historical OHLCV data
-        historical_data = klines
+        historical_data = klines[:-1]  # Exclude the last (current) candle
         latest_ohlcv = klines[-1]  # The latest (current) candle
 
         # Convert the data into a DataFrame
@@ -95,7 +79,7 @@ while True:
 
         df = bollinger_bands_strategy(df)
 
-        # Calculate EMA 100
+        # Calculate the 100-period EMA
         df['ema_100'] = df['close'].ewm(span=100, adjust=False).mean()
 
         # Retrieve free USDT balance
@@ -103,18 +87,13 @@ while True:
 
         # Your buy and sell conditions
         def buy_condition():
-            current_price = df['close'].iloc[-1]
-            lower_band = df['lower_band'].iloc[-1]
-            open_price = df['open'].iloc[-1]
-            ema_100 = df['ema_100'].iloc[-1]
-            
-            # Print values for debugging
-            print(f"Open: {open_price}, EMA 100: {ema_100}")
-            
-            if open_price < ema_100 and current_price <= 0.982 * lower_band:
+            current_open = float(latest_ohlcv[1])
+            current_ema_100 = df['ema_100'].iloc[-1]
+            if df['close'].iloc[-1] <= 0.982 * df['lower_band'].iloc[-1] and current_open < current_ema_100:
                 return True
             else:
-                print(f"Lower Band Condition: {0.982 * lower_band}")
+                print(f"Wick Condition: {0.982 * df['lower_band'].iloc[-1]}")
+                print(f"Current Open: {current_open}, EMA 100: {current_ema_100}")
                 print("Buy condition not met")
             return False
 
@@ -127,7 +106,7 @@ while True:
                 if price_difference >= 0.012:
                     return True
                 else:
-                    print(f"Sell condition not met. Price Difference: {price_difference}, Current Price: {current_price}")
+                    print(f"Sell condition not met. Price Difference: {price_difference}, Current Price: {df['close'].iloc[-1]}")
                     return False
             else:
                 print(f"Sell condition not met. Buy Price: {buy_price}, Current Price: {df['close'].iloc[-1]}")
@@ -150,7 +129,7 @@ while True:
                 if lot_size_filter:
                     # Extract the step size and precision from the filter
                     quantity_step_size = float(lot_size_filter['stepSize'])
-                    max_precision = len(lot_size_filter['maxQty'].split('.')[1])
+                    max_precision = len(lot_size_filter['minQty'].split('.')[1])
 
                     # Calculate the quantity based on available USDT balance
                     solusdt_ticker = client.get_symbol_ticker(symbol='SOLUSDT')
@@ -164,31 +143,21 @@ while True:
                     # Adjust the quantity to match the maximum allowed precision
                     quantity_to_buy = round(quantity_to_buy, max_precision)
 
-                    # Adjust the quantity to meet the minimum notional value
-                    min_notional = get_min_notional(symbol)
-                    quantity_to_buy = adjust_quantity_to_min_notional(quantity_to_buy, current_sol_price, min_notional)
-
-                    if quantity_to_buy * current_sol_price >= min_notional:
-                        print("Executing Buy Order")
-                        # Place a real buy order here
-                        order = client.create_order(
-                            symbol=symbol,
-                            side='BUY',
-                            type='MARKET',
-                            quantity=quantity_to_buy
-                        )
-                        print(f"{Fore.GREEN}Executing Buy Order: {order}{Style.RESET_ALL}")
-                        print(f"{Fore.GREEN}Buy Order Executed at Price: {order['fills'][0]['price']}{Style.RESET_ALL}")
-                        buy_price = order['fills'][0]['price']  # Store the real buy price
-                        with open("buy_price.json", "w") as buy_price_file:
-                            json.dump(buy_price, buy_price_file)
-                    else:
-                        print(f"{Fore.RED}Buy order not placed. Quantity to buy does not meet minimum notional value.{Style.RESET_ALL}")
+                    print("Executing Buy Order")
+                    # Place a real buy order here
+                    order = client.create_order(
+                        symbol=symbol,
+                        side='BUY',
+                        type='MARKET',
+                        quantity=quantity_to_buy
+                    )
+                    print(f"{Fore.GREEN}Executing Buy Order: {order}{Style.RESET_ALL}")
+                    print(f"{Fore.GREEN}Buy Order Executed at Price: {order['fills'][0]['price']}{Style.RESET_ALL}")
+                    buy_price = order['fills'][0]['price']  # Store the real buy price
+                    with open("buy_price.json", "w") as buy_price_file:
+                        json.dump(buy_price, buy_price_file)
                 else:
                     print("LOT_SIZE filter not found in symbol info.")
-
-            # Continue to the sell condition check
-            continue
 
         # Sell condition check
         if sell_condition():
@@ -210,7 +179,7 @@ while True:
                     if lot_size_filter:
                         # Extract the step size and precision from the filter
                         quantity_step_size = float(lot_size_filter['stepSize'])
-                        max_precision = len(lot_size_filter['maxQty'].split('.')[1])
+                        max_precision = len(lot_size_filter['minQty'].split('.')[1])
 
                         # Calculate the quantity based on available balance
                         sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
@@ -222,31 +191,28 @@ while True:
                         # Adjust the quantity to match the maximum allowed precision
                         quantity_to_sell = round(quantity_to_sell, max_precision)
 
-                        if quantity_to_sell * current_sol_price >= min_notional:
-                            print(f"{Fore.RED}Executing Sell Order{Style.RESET_ALL}")
-                            # Place a real sell order here
-                            order = client.create_order(
-                                symbol=symbol,
-                                side='SELL',
-                                type='MARKET',
-                                quantity=quantity_to_sell
-                            )
-                            print(f"{Fore.RED}Sell Order Executed: {order}{Style.RESET_ALL}")
-                            print(f"{Fore.RED}Sell Order Executed at Price: {order['fills'][0]['price']}{Style.RESET_ALL}")
-                            sell_price = order['fills'][0]['price']  # Store the real sell price
-                            with open("sell_price.json", "w") as sell_price_file:
-                                json.dump(sell_price, sell_price_file)
-                            buy_price = None  # Reset the buy price after selling
-                            with open("buy_price.json", "w") as buy_price_file:
-                                json.dump(buy_price, buy_price_file)
-                        else:
-                            print(f"{Fore.RED}Sell order not placed. Quantity to sell does not meet minimum notional value.{Style.RESET_ALL}")
+                        print(f"{Fore.RED}Executing Sell Order{Style.RESET_ALL}")
+                        # Place a real sell order here
+                        order = client.create_order(
+                            symbol=symbol,
+                            side='SELL',
+                            type='MARKET',
+                            quantity=quantity_to_sell
+                        )
+                        print(f"{Fore.RED}Sell Order Executed: {order}{Style.RESET_ALL}")
+                        print(f"{Fore.RED}Sell Order Executed at Price: {order['fills'][0]['price']}{Style.RESET_ALL}")
+                        sell_price = order['fills'][0]['price']  # Store the real sell price
+                        with open("sell_price.json", "w") as sell_price_file:
+                            json.dump(sell_price, sell_price_file)
+                        buy_price = None  # Reset the buy price after selling
+                        with open("buy_price.json", "w") as buy_price_file:
+                            json.dump(buy_price, buy_price_file)
                     else:
                         print("LOT_SIZE filter not found in symbol info.")
 
         # Sleep for a while (you can adjust the interval)
-        print(f"{Fore.BLUE}Sleeping for 1 second{Style.RESET_ALL}")
-        time.sleep(1)  # Sleep for 1 second
+        print(f"{Fore.BLUE}Sleeping for 1 seconds{Style.RESET_ALL}")
+        time.sleep(1)  # Sleep for 1 seconds
 
     except Exception as e:
         print("Error:", e)

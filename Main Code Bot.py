@@ -4,8 +4,6 @@ import pandas as pd
 from binance.client import Client
 from colorama import init, Fore, Style
 import json
-import math
-import smtplib, ssl
 from dotenv import load_dotenv
 
 # Load .env file
@@ -30,7 +28,7 @@ buy_price = None
 
 # Initialize sell price variable
 sell_price = None
-           
+
 # Set to True for testing, False for live trading
 testing_mode = False
 
@@ -87,7 +85,7 @@ while True:
         # Retrieve free USDT balance
         free_usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
 
-        # Your buy and sell conditions
+        # Buy condition
         def buy_condition():
             current_open = float(latest_ohlcv[1])
             current_ema_100 = df['ema_100'].iloc[-1]
@@ -98,17 +96,17 @@ while True:
                 print(f"Current Open: {current_open}, EMA 100: {current_ema_100}")
                 print("Buy condition not met")
             return False
-          
+
         # Sell condition using "OR" gate logic
         def sell_condition():
             if buy_price is not None:
                 current_price = df['close'].iloc[-1]
                 buy_price_float = float(buy_price)
                 price_difference = (current_price - buy_price_float) / buy_price_float
-                if price_difference >= 0.012:           
+                if price_difference >= 0.012:
                     return True
                 else:
-                    print(f"Sell condition not met. Price Differnce: {price_difference}, Current Price: {df['close'].iloc[-1]}")
+                    print(f"Sell condition not met. Price Difference: {price_difference}, Current Price: {df['close'].iloc[-1]}")
                     return False
             else:
                 print(f"Sell condition not met. Buy Price: {buy_price}, Current Price: {df['close'].iloc[-1]}")
@@ -118,11 +116,11 @@ while True:
         if buy_condition() and free_usdt_balance > 1:
             if testing_mode:
                 print(f"{Fore.GREEN}Simulating Buy Order{Style.RESET_ALL}")
-                print(f"{Fore.GREEN}Simulated Buy Price: {df['close'].iloc[-1]}{Style.RESET_ALL}") # Print the simulated buy price         
+                print(f"{Fore.GREEN}Simulated Buy Price: {df['close'].iloc[-1]}{Style.RESET_ALL}")  # Print the simulated buy price         
                 with open("buy_price.json", "w") as buy_price_file:
                     json.dump(df['close'].iloc[-1], buy_price_file)
             else:
-                # Retrieve symbol info for 'Symbol'
+                # Retrieve symbol info for 'SOLUSDT'
                 symbol_info = client.get_symbol_info('SOLUSDT')
 
                 # Find the 'LOT_SIZE' filter
@@ -145,16 +143,13 @@ while True:
                     # Adjust the quantity to match the maximum allowed precision
                     quantity_to_buy = round(quantity_to_buy, max_precision)
                 
-                    print("Executing Buy Order")
+                    print(f"{Fore.GREEN}Executing Buy Order{Style.RESET_ALL}")
                     # Place a real buy order here
-                    order = client.create_order(
+                    order = client.order_market_buy(
                         symbol=symbol,
-                        side='BUY',
-                        type='MARKET',
                         quantity=quantity_to_buy
                     )
-                    print(f"{Fore.GREEN}Executing Buy Order: {order}{Style.RESET_ALL}")
-                    print(f"{Fore.GREEN}Buy Order Executed at Price: {buy_price}{Style.RESET_ALL}")
+                    print(f"{Fore.GREEN}Buy Order Executed: {order}{Style.RESET_ALL}")
                     buy_price = order['fills'][0]['price']  # Store the real buy price
                     with open("buy_price.json", "w") as buy_price_file:
                         json.dump(buy_price, buy_price_file)
@@ -167,12 +162,12 @@ while True:
             if sol_balance > 0:
                 if testing_mode:
                     print(f"{Fore.RED}Simulating Sell Order{Style.RESET_ALL}")
-                    print(f"{Fore.RED}Simulated Sell Price:{df['close'].iloc[-1]}{Style.RESET_ALL}")  # Print the simulated sell price
+                    print(f"{Fore.RED}Simulated Sell Price: {df['close'].iloc[-1]}{Style.RESET_ALL}")  # Print the simulated sell price
                     buy_price = None  # Reset the buy price after selling
                     with open("buy_price.json", "w") as buy_price_file:
                         json.dump(buy_price, buy_price_file)
                 else:
-                    # Retrieve symbol info for 'Symbol'
+                    # Retrieve symbol info for 'SOLUSDT'
                     symbol_info = client.get_symbol_info('SOLUSDT')
 
                     # Find the 'LOT_SIZE' filter
@@ -193,17 +188,14 @@ while True:
                         # Adjust the quantity to match the maximum allowed precision
                         quantity_to_sell = round(quantity_to_sell, max_precision)
 
-                        print("{Fore.RED}Executing Sell Order{Style.RESET_ALL}")
+                        print(f"{Fore.RED}Executing Sell Order{Style.RESET_ALL}")
                         # Place a real sell order here
-                        order = client.create_order(
+                        order = client.order_market_sell(
                             symbol=symbol,
-                            side='SELL',
-                            type='MARKET',
                             quantity=quantity_to_sell
                         )
                         print(f"{Fore.RED}Sell Order Executed: {order}{Style.RESET_ALL}")
-                        print(f"{Fore.RED}Sell Order Executed at Price: {order['fills'][0]['price']}{Style.RESET_ALL}")
-                        sell_price = order['fills'][0]['price'] # Store the real sell price
+                        sell_price = order['fills'][0]['price']  # Store the real sell price
                         with open("sell_price.json", "w") as sell_price_file:
                             json.dump(sell_price, sell_price_file)
                         buy_price = None  # Reset the buy price after selling
@@ -213,8 +205,8 @@ while True:
                         print("LOT_SIZE filter not found in symbol info.")
 
         # Sleep for a while (you can adjust the interval)
-        print(f"{Fore.BLUE}Sleeping for 1 seconds{Style.RESET_ALL}")
-        time.sleep(1)  # Sleep for 1 seconds                    
+        print(f"{Fore.BLUE}Sleeping for 1 second{Style.RESET_ALL}")
+        time.sleep(1)  # Sleep for 1 second                    
 
     except Exception as e:
         print("Error:", e)

@@ -129,10 +129,10 @@ while True:
                     max_precision = len(lot_size_filter['maxQty'].split('.')[1])
 
                     # Calculate the quantity based on available USDT balance
-                    dusdt_ticker = client.get_symbol_ticker(symbol='DUSDT')
-                    current_d_price = float(dusdt_ticker['price'])
+                    solusdt_ticker = client.get_symbol_ticker(symbol='SOLUSDT')
+                    current_sol_price = float(solusdt_ticker['price'])
                     usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])    
-                    quantity_to_buy = usdt_balance / current_d_price
+                    quantity_to_buy = usdt_balance / current_sol_price
 
                     # Ensure the quantity adheres to Binance's rules for step size
                     quantity_to_buy -= quantity_to_buy % quantity_step_size
@@ -182,7 +182,7 @@ while True:
                         max_precision = len(lot_size_filter['maxQty'].split('.')[1])
 
                         # Calculate the quantity based on available balance
-                        d_balance = float(client.get_asset_balance(asset='D')['free'])
+                        sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
                         quantity_to_sell = sol_balance
 
                         # Ensure the quantity adheres to Binance's rules for step size

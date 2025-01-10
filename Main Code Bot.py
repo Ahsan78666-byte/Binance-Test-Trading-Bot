@@ -16,6 +16,9 @@ init()
 API_KEY = os.environ.get('API_KEY')
 API_SECRET = os.environ.get('API_SECRET')
 
+if not API_KEY or not API_SECRET:
+    raise ValueError("Please set BINANCE_API_KEY and BINANCE_API_SECRET environment variables.")
+
 # Initialize the Binance client
 client = Client(API_KEY, API_SECRET, testnet=True)
 
@@ -28,7 +31,7 @@ buy_price = None
 
 # Initialize sell price variable
 sell_price = None
-
+           
 # Set to True for testing, False for live trading
 testing_mode = False
 
@@ -42,7 +45,7 @@ while True:
 
         # Extract the historical OHLCV data
         historical_data = klines  # Exclude the last (current) candle
-        latest_ohlcv = klines[-1]  # The latest (current) candle
+        latest_ohlcv = klines  # The latest (current) candle
 
         # Convert the data into a DataFrame
         df = pd.DataFrame(historical_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
@@ -56,19 +59,19 @@ while True:
         df.set_index('timestamp', inplace=True)
 
         # Load the buy price from the file if it exists
-        if os.path.exists("buy_price.json"):
-            with open("buy_price.json", "r") as buy_price_file:
-                buy_price = json.load(buy_price_file)
-                print(f"Buy Price: {buy_price}")
+        if os.path.exists(""):
+            with open("", "r") as buy_price_file:
+               buy_price = json.load(buy_price_file)
+               print(f"Buy Price: {buy_price}")
 
         # Load the sell price from the file if it exists
         if os.path.exists("sell_price.json"):
             with open("sell_price.json", "r") as sell_price_file:
-                sell_price = json.load(sell_price_file)
-                print(f"Sell Price: {sell_price}")      
+               sell_price = json.load(sell_price_file)
+               print(f"Sell Price: {sell_price}")      
 
         # Define Bollinger Bands strategy
-        def bollinger_bands_strategy(df, window=8, num_std_dev=1):
+        def bollinger_bands_strategy(df, window=20, num_std_dev=1):
             df['rolling_mean'] = df['close'].rolling(window=window).mean()
             df['rolling_std'] = df['close'].rolling(window=window).std()
             df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)
@@ -79,34 +82,28 @@ while True:
 
         df = bollinger_bands_strategy(df)
 
-        # Calculate the 100-period EMA
-        df['ema_100'] = df['close'].ewm(span=100, adjust=False).mean()
-
         # Retrieve free USDT balance
         free_usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
 
-        # Buy condition
+        # Your buy and sell conditions
         def buy_condition():
-            current_open = float(latest_ohlcv[1])
-            current_ema_100 = df['ema_100'].iloc[-1]
-            if (df['close'].iloc[-1] <= 0.982 * df['lower_band'].iloc[-1]) and (current_open < current_ema_100):
+            if df['close'].iloc[-1] <= 0.982 * df['lower_band'].iloc[-1]:
                 return True
             else:
                 print(f"Wick Condition: {0.982 * df['lower_band'].iloc[-1]}")
-                print(f"Current Open: {current_open}, EMA 100: {current_ema_100}")
                 print("Buy condition not met")
             return False
-
+          
         # Sell condition using "OR" gate logic
         def sell_condition():
             if buy_price is not None:
                 current_price = df['close'].iloc[-1]
                 buy_price_float = float(buy_price)
                 price_difference = (current_price - buy_price_float) / buy_price_float
-                if price_difference >= 0.012:
+                if price_difference >= 0.012:           
                     return True
                 else:
-                    print(f"Sell condition not met. Price Difference: {price_difference}, Current Price: {df['close'].iloc[-1]}")
+                    print(f"Sell condition not met. Price Differnce: {price_difference}, Current Price: {df['close'].iloc[-1]}")
                     return False
             else:
                 print(f"Sell condition not met. Buy Price: {buy_price}, Current Price: {df['close'].iloc[-1]}")
@@ -116,11 +113,11 @@ while True:
         if buy_condition() and free_usdt_balance > 1:
             if testing_mode:
                 print(f"{Fore.GREEN}Simulating Buy Order{Style.RESET_ALL}")
-                print(f"{Fore.GREEN}Simulated Buy Price: {df['close'].iloc[-1]}{Style.RESET_ALL}")  # Print the simulated buy price         
+                print(f"{Fore.GREEN}Simulated Buy Price: {df['close'].iloc[-1]}{Style.RESET_ALL}") # Print the simulated buy price         
                 with open("buy_price.json", "w") as buy_price_file:
                     json.dump(df['close'].iloc[-1], buy_price_file)
             else:
-                # Retrieve symbol info for 'SOLUSDT'
+                # Retrieve symbol info for 'Symbol'
                 symbol_info = client.get_symbol_info('SOLUSDT')
 
                 # Find the 'LOT_SIZE' filter
@@ -129,13 +126,13 @@ while True:
                 if lot_size_filter:
                     # Extract the step size and precision from the filter
                     quantity_step_size = float(lot_size_filter['stepSize'])
-                    max_precision = len(lot_size_filter['minQty'].split('.')[1])
+                    max_precision = len(lot_size_filter['maxQty'].split('.')[1])
 
                     # Calculate the quantity based on available USDT balance
-                    solusdt_ticker = client.get_symbol_ticker(symbol='SOLUSDT')
-                    current_sol_price = float(solusdt_ticker['price'])
+                    dusdt_ticker = client.get_symbol_ticker(symbol='DUSDT')
+                    current_d_price = float(dusdt_ticker['price'])
                     usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])    
-                    quantity_to_buy = usdt_balance / current_sol_price
+                    quantity_to_buy = usdt_balance / current_d_price
 
                     # Ensure the quantity adheres to Binance's rules for step size
                     quantity_to_buy -= quantity_to_buy % quantity_step_size
@@ -143,31 +140,37 @@ while True:
                     # Adjust the quantity to match the maximum allowed precision
                     quantity_to_buy = round(quantity_to_buy, max_precision)
                 
-                    print(f"{Fore.GREEN}Executing Buy Order{Style.RESET_ALL}")
+                    print("Executing Buy Order")
                     # Place a real buy order here
-                    order = client.order_market_buy(
+                    order = client.create_order(
                         symbol=symbol,
+                        side='BUY',
+                        type='MARKET',
                         quantity=quantity_to_buy
                     )
-                    print(f"{Fore.GREEN}Buy Order Executed: {order}{Style.RESET_ALL}")
+                    print(f"{Fore.GREEN}Executing Buy Order: {order}{Style.RESET_ALL}")
+                    print(f"{Fore.GREEN}Buy Order Executed at Price: {buy_price}{Style.RESET_ALL}")
                     buy_price = order['fills'][0]['price']  # Store the real buy price
                     with open("buy_price.json", "w") as buy_price_file:
                         json.dump(buy_price, buy_price_file)
                 else:
                     print("LOT_SIZE filter not found in symbol info.")
 
+                # Continue to the sell condition check
+                continue
+            
         # Sell condition check
         if sell_condition():
             sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
             if sol_balance > 0:
                 if testing_mode:
                     print(f"{Fore.RED}Simulating Sell Order{Style.RESET_ALL}")
-                    print(f"{Fore.RED}Simulated Sell Price: {df['close'].iloc[-1]}{Style.RESET_ALL}")  # Print the simulated sell price
+                    print(f"{Fore.RED}Simulated Sell Price:{df['close'].iloc[-1]}{Style.RESET_ALL}")  # Print the simulated sell price
                     buy_price = None  # Reset the buy price after selling
                     with open("buy_price.json", "w") as buy_price_file:
                         json.dump(buy_price, buy_price_file)
                 else:
-                    # Retrieve symbol info for 'SOLUSDT'
+                    # Retrieve symbol info for 'Symbol'
                     symbol_info = client.get_symbol_info('SOLUSDT')
 
                     # Find the 'LOT_SIZE' filter
@@ -176,10 +179,10 @@ while True:
                     if lot_size_filter:
                         # Extract the step size and precision from the filter
                         quantity_step_size = float(lot_size_filter['stepSize'])
-                        max_precision = len(lot_size_filter['minQty'].split('.')[1])
+                        max_precision = len(lot_size_filter['maxQty'].split('.')[1])
 
                         # Calculate the quantity based on available balance
-                        sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
+                        d_balance = float(client.get_asset_balance(asset='D')['free'])
                         quantity_to_sell = sol_balance
 
                         # Ensure the quantity adheres to Binance's rules for step size
@@ -188,14 +191,17 @@ while True:
                         # Adjust the quantity to match the maximum allowed precision
                         quantity_to_sell = round(quantity_to_sell, max_precision)
 
-                        print(f"{Fore.RED}Executing Sell Order{Style.RESET_ALL}")
+                        print("{Fore.RED}Executing Sell Order{Style.RESET_ALL}")
                         # Place a real sell order here
-                        order = client.order_market_sell(
+                        order = client.create_order(
                             symbol=symbol,
+                            side='SELL',
+                            type='MARKET',
                             quantity=quantity_to_sell
                         )
                         print(f"{Fore.RED}Sell Order Executed: {order}{Style.RESET_ALL}")
-                        sell_price = order['fills'][0]['price']  # Store the real sell price
+                        print(f"{Fore.RED}Sell Order Executed at Price: {order['fills'][0]['price']}{Style.RESET_ALL}")
+                        sell_price = order['fills'][0]['price'] # Store the real sell price
                         with open("sell_price.json", "w") as sell_price_file:
                             json.dump(sell_price, sell_price_file)
                         buy_price = None  # Reset the buy price after selling
@@ -205,8 +211,9 @@ while True:
                         print("LOT_SIZE filter not found in symbol info.")
 
         # Sleep for a while (you can adjust the interval)
-        print(f"{Fore.BLUE}Sleeping for 1 second{Style.RESET_ALL}")
-        time.sleep(1)  # Sleep for 1 second                    
+        print(f"{Fore.BLUE}Sleeping for 1 seconds{Style.RESET_ALL}")
+        time.sleep(1)  # Sleep for 1 seconds                    
 
     except Exception as e:
         print("Error:", e)
+

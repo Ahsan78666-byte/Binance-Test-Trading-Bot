@@ -31,7 +31,7 @@ buy_price = None
 sell_price = None
 
 # Set to True for testing, False for live trading
-testing_mode = True
+testing_mode = False
 
 def get_lot_size_precision(symbol_info):
     """Retrieve lot size and precision from symbol info."""

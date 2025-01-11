@@ -56,7 +56,7 @@ def fetch_klines(symbol, interval, limit=24):
     df.set_index('timestamp', inplace=True)
     return df
 
-def bollinger_bands_strategy(df, window=20, num_std_dev=2):
+def bollinger_bands_strategy(df, window=20, num_std_dev=1):
     """Apply Bollinger Bands strategy."""
     df['rolling_mean'] = df['close'].rolling(window=window).mean()
     df['rolling_std'] = df['close'].rolling(window=window).std()

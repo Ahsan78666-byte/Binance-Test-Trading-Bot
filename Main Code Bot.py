@@ -54,7 +54,7 @@ historical_data = []
 while True:
     try:
        # Fetch candlestick data for the trading pair
-        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=1000)  # Fetch 100 previous candles
+        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=500)  # Fetch 100 previous candles
 
         # Extract the historical OHLCV data
         historical_data = klines  # Exclude the last (current) candle
@@ -84,7 +84,7 @@ while True:
                print(f"Sell Price: {sell_price}")      
 
         # Define Bollinger Bands strategy
-        def bollinger_bands_strategy(df, window=20, num_std_dev=1):
+        def bollinger_bands_strategy(df, window=10, num_std_dev=1):
             df['rolling_mean'] = df['close'].rolling(window=window).mean()
             df['rolling_std'] = df['close'].rolling(window=window).std()
             df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)
@@ -100,10 +100,10 @@ while True:
 
         # Your buy and sell conditions
         def buy_condition():
-            if df['close'].iloc[-1] <= 0.986 * df['lower_band'].iloc[-1]:
+            if df['close'].iloc[-1] <= 0.982 * df['lower_band'].iloc[-1]:
                 return True
             else:
-                print(f"Wick Condition: {0.986 * df['lower_band'].iloc[-1]}")
+                print(f"Wick Condition: {0.982 * df['lower_band'].iloc[-1]}")
                 print("Buy condition not met")
             return False
           

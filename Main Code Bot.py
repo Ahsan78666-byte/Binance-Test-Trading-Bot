@@ -54,11 +54,11 @@ historical_data = []
 while True:
     try:
        # Fetch candlestick data for the trading pair
-        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=500)  # Fetch 100 previous candles
+        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=700)  # Fetch 100 previous candles
 
         # Extract the historical OHLCV data
-        historical_data = klines  # Exclude the last (current) candle
-        latest_ohlcv = klines  # The latest (current) candle
+        historical_data = klines[:-1]  # Exclude the last (current) candle
+        latest_ohlcv = klines[-1]  # The latest (current) candle
 
         # Convert the data into a DataFrame
         df = pd.DataFrame(historical_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
@@ -100,10 +100,10 @@ while True:
 
         # Your buy and sell conditions
         def buy_condition():
-            if df['close'].iloc[-1] <= 0.982 * df['lower_band'].iloc[-1]:
+            if df['close'].iloc[-1] <= 0.99 * df['lower_band'].iloc[-1]:
                 return True
             else:
-                print(f"Wick Condition: {0.982 * df['lower_band'].iloc[-1]}")
+                print(f"Wick Condition: {0.99 * df['lower_band'].iloc[-1]}")
                 print("Buy condition not met")
             return False
           

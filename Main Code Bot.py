@@ -100,10 +100,10 @@ while True:
 
         # Your buy and sell conditions
         def buy_condition():
-            if df['close'].iloc[-1] <= 0.99 * df['lower_band'].iloc[-1]:
+            if df['close'].iloc[-1] <= 0.986 * df['lower_band'].iloc[-1]:
                 return True
             else:
-                print(f"Wick Condition: {0.99 * df['lower_band'].iloc[-1]}")
+                print(f"Wick Condition: {0.986 * df['lower_band'].iloc[-1]}")
                 print("Buy condition not met")
             return False
           
@@ -113,7 +113,7 @@ while True:
                 current_price = df['close'].iloc[-1]
                 buy_price_float = float(buy_price)
                 price_difference = (current_price - buy_price_float) / buy_price_float
-                if price_difference >= 0.012:           
+                if price_difference >= 0.010:           
                     return True
                 else:
                     print(f"Sell condition not met. Price Differnce: {price_difference}, Current Price: {df['close'].iloc[-1]}")

@@ -54,7 +54,7 @@ historical_data = []
 while True:
     try:
        # Fetch candlestick data for the trading pair
-        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=700)  # Fetch 100 previous candles
+        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=1000)  # Fetch 100 previous candles
 
         # Extract the historical OHLCV data
         historical_data = klines[:-1]  # Exclude the last (current) candle
@@ -100,10 +100,10 @@ while True:
 
         # Your buy and sell conditions
         def buy_condition():
-            if df['close'].iloc[-1] <= 0.986 * df['lower_band'].iloc[-1]:
+            if df['close'].iloc[-1] <= 0.98 * df['lower_band'].iloc[-1]:
                 return True
             else:
-                print(f"Wick Condition: {0.986 * df['lower_band'].iloc[-1]}")
+                print(f"Wick Condition: {0.98 * df['lower_band'].iloc[-1]}")
                 print("Buy condition not met")
             return False
           
@@ -113,7 +113,7 @@ while True:
                 current_price = df['close'].iloc[-1]
                 buy_price_float = float(buy_price)
                 price_difference = (current_price - buy_price_float) / buy_price_float
-                if price_difference >= 0.010:           
+                if price_difference >= 0.012:           
                     return True
                 else:
                     print(f"Sell condition not met. Price Differnce: {price_difference}, Current Price: {df['close'].iloc[-1]}")

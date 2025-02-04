@@ -89,8 +89,8 @@ def on_message(ws, message):
         historical_data = historical_data.tail(max(500, 10))
 
         # Implement Bollinger Bands strategy
-        historical_data['rolling_mean'] = historical_data['close'].rolling(window=10).mean()
-        historical_data['rolling_std'] = historical_data['close'].rolling(window=10).std()
+        historical_data['rolling_mean'] = historical_data['close'].rolling(window=20).mean()
+        historical_data['rolling_std'] = historical_data['close'].rolling(window=20).std()
         historical_data['upper_band'] = historical_data['rolling_mean'] + (historical_data['rolling_std'] * 1)
         historical_data['lower_band'] = historical_data['rolling_mean'] - (historical_data['rolling_std'] * 1)
         historical_data['signal'] = 0  # 0 means do nothing
@@ -109,7 +109,7 @@ def on_message(ws, message):
         logging.info(f"Sell Price: {sell_price}")
 
         # Buy condition
-        buy_threshold = 0.986  # Configurable threshold
+        buy_threshold = 0.99  # Configurable threshold
         if historical_data['signal'].iloc[-1] == 1 and free_usdt_balance > 1:
             if historical_data['close'].iloc[-1] <= buy_threshold * historical_data['lower_band'].iloc[-1]:
                 if testing_mode:

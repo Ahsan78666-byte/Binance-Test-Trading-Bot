@@ -41,7 +41,7 @@ historical_data = []
 while True:
     try:
         # Fetch candlestick data for the trading pair
-        klines = client.get_historical_klines(symbol=symbol, interval=timeframe, limit=100)  # Fetch previous candles
+        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=50)  # Fetch previous candles
 
         # Extract the historical OHLCV data
         historical_data = klines  # Exclude the last (current) candle
@@ -212,11 +212,10 @@ while True:
 
         # Sleep for a while (you can adjust the interval)
         print(f"{Fore.BLUE}Sleeping for 0 seconds{Style.RESET_ALL}")
-        time.sleep(0)  # Sleep for 0 seconds                    
+        time.sleep(1)  # Sleep for 1 seconds                    
 
     except Exception as e:
         print("Error:", e)
-
 
 
 

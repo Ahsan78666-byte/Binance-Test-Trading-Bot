@@ -41,7 +41,7 @@ historical_data = []
 while True:
     try:
         # Fetch candlestick data for the trading pair
-        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=50)  # Fetch previous candles
+        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=100)  # Fetch previous candles
 
         # Extract the historical OHLCV data
         historical_data = klines  # Exclude the last (current) candle
@@ -122,25 +122,36 @@ while True:
 
                 # Find the 'LOT_SIZE' filter
                 lot_size_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE'), None)
-
                 if lot_size_filter:
                     # Extract the step size and precision from the filter
                     quantity_step_size = float(lot_size_filter['stepSize'])
-                    max_precision = len(lot_size_filter['maxQty'].split('.')[1])
-
-                    # Calculate the quantity based on available USDT balance
+                    max_precision = len(lot_size_filter['stepSize'].split('.')[1])  # Determine precision from stepSize
+                    
+                    # Get the current price of SOLUSDT
                     solusdt_ticker = client.get_symbol_ticker(symbol='SOLUSDT')
                     current_sol_price = float(solusdt_ticker['price'])
-                    usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])    
-                    quantity_to_buy = usdt_balance / current_sol_price
-
-                    # Ensure the quantity adheres to Binance's rules for step size
-                    quantity_to_buy -= quantity_to_buy % quantity_step_size
-
+                    
+                    # Get the available USDT balance
+                    usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
+                    
+                    # Calculate the maximum quantity you can buy with the available USDT balance
+                    max_quantity = usdt_balance / current_sol_price
+                    
+                    # Round down to the nearest valid multiple of stepSize
+                    quantity_to_buy = (max_quantity // quantity_step_size) * quantity_step_size
+                    
                     # Adjust the quantity to match the maximum allowed precision
                     quantity_to_buy = round(quantity_to_buy, max_precision)
-                
-                    print("Executing Buy Order")
+                    
+                    # Recalculate the actual USDT amount that will be spent
+                    usdt_spent = quantity_to_buy * current_sol_price
+                    
+                    # Ensure the calculated USDT spent does not exceed the available balance
+                    if usdt_spent > usdt_balance:
+                        raise ValueError("Calculated USDT spent exceeds available balance. Adjust logic.")
+                    
+                    print(f"Executing Buy Order: Quantity={quantity_to_buy}, Price={current_sol_price}, Total USDT Spent={usdt_spent}")
+                    
                     # Place a real buy order here
                     order = client.create_order(
                         symbol=symbol,
@@ -175,23 +186,26 @@ while True:
 
                     # Find the 'LOT_SIZE' filter
                     lot_size_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE'), None)
-
                     if lot_size_filter:
                         # Extract the step size and precision from the filter
                         quantity_step_size = float(lot_size_filter['stepSize'])
-                        max_precision = len(lot_size_filter['maxQty'].split('.')[1])
-
-                        # Calculate the quantity based on available balance
+                        max_precision = len(lot_size_filter['stepSize'].split('.')[1])  # Determine precision from stepSize
+                        
+                        # Get the available SOL balance
                         sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
-                        quantity_to_sell = sol_balance
-
-                        # Ensure the quantity adheres to Binance's rules for step size
-                        quantity_to_sell -= quantity_to_sell % quantity_step_size
-
+                        
+                        # Round down to the nearest valid multiple of stepSize
+                        quantity_to_sell = (sol_balance // quantity_step_size) * quantity_step_size
+                        
                         # Adjust the quantity to match the maximum allowed precision
                         quantity_to_sell = round(quantity_to_sell, max_precision)
-
-                        print("{Fore.RED}Executing Sell Order{Style.RESET_ALL}")
+                        
+                        # Ensure the quantity is greater than zero (to avoid invalid orders)
+                        if quantity_to_sell <= 0:
+                            raise ValueError("No SOL available to sell or quantity is too small.")
+                        
+                        print(f"Executing Sell Order: Quantity={quantity_to_sell}")
+                        
                         # Place a real sell order here
                         order = client.create_order(
                             symbol=symbol,
@@ -211,7 +225,7 @@ while True:
                         print("LOT_SIZE filter not found in symbol info.")
 
         # Sleep for a while (you can adjust the interval)
-        print(f"{Fore.BLUE}Sleeping for 0 seconds{Style.RESET_ALL}")
+        print(f"{Fore.BLUE}Sleeping for 1 seconds{Style.RESET_ALL}")
         time.sleep(1)  # Sleep for 1 seconds                    
 
     except Exception as e:

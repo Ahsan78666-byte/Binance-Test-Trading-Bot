@@ -41,7 +41,7 @@ historical_data = []
 while True:
     try:
         # Fetch candlestick data for the trading pair
-        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=100)  # Fetch previous candles
+        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=50)  # Fetch previous candles
 
         # Extract the historical OHLCV data
         historical_data = klines  # Exclude the last (current) candle
@@ -71,7 +71,7 @@ while True:
                print(f"Sell Price: {sell_price}")      
 
         # Define Bollinger Bands strategy
-        def bollinger_bands_strategy(df, window=20, num_std_dev=1):
+        def bollinger_bands_strategy(df, window=10, num_std_dev=1):
             df['rolling_mean'] = df['close'].rolling(window=window).mean()
             df['rolling_std'] = df['close'].rolling(window=window).std()
             df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)
@@ -230,8 +230,6 @@ while True:
 
     except Exception as e:
         print("Error:", e)
-
-
 
 
 

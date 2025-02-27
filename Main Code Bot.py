@@ -71,7 +71,7 @@ while True:
                print(f"Sell Price: {sell_price}")      
 
         # Define Bollinger Bands strategy
-        def bollinger_bands_strategy(df, window=10, num_std_dev=1):
+        def bollinger_bands_strategy(df, window=8, num_std_dev=1):
             df['rolling_mean'] = df['close'].rolling(window=window).mean()
             df['rolling_std'] = df['close'].rolling(window=window).std()
             df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)
@@ -87,10 +87,10 @@ while True:
 
         # Your buy and sell conditions
         def buy_condition():
-            if df['close'].iloc[-1] <= 0.99 * df['lower_band'].iloc[-1]:
+            if df['close'].iloc[-1] <= 0.985 * df['lower_band'].iloc[-1]:
                 return True
             else:
-                print(f"Wick Condition: {0.99 * df['lower_band'].iloc[-1]}")
+                print(f"Wick Condition: {0.985 * df['lower_band'].iloc[-1]}")
                 print("Buy condition not met")
             return False
           

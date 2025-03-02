@@ -71,7 +71,7 @@ while True:
                print(f"Sell Price: {sell_price}")      
 
         # Define Bollinger Bands strategy
-        def bollinger_bands_strategy(df, window=8, num_std_dev=1):
+        def bollinger_bands_strategy(df, window=10, num_std_dev=1):
             df['rolling_mean'] = df['close'].rolling(window=window).mean()
             df['rolling_std'] = df['close'].rolling(window=window).std()
             df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)

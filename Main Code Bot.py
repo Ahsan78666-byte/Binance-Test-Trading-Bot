@@ -6,230 +6,170 @@ from colorama import init, Fore, Style
 import json
 from dotenv import load_dotenv
 
-# Load .env file
+# Initialize environment and Binance client
 load_dotenv()
-
-# Initialize colorama
 init()
 
-# Load API credentials from environment variables
 API_KEY = os.environ.get('API_KEY')
 API_SECRET = os.environ.get('API_SECRET')
 
-# Initialize the Binance client
 client = Client(API_KEY, API_SECRET, testnet=True)
 
 if not API_KEY or not API_SECRET:
-    raise ValueError("Please set BINANCE_API_KEY and BINANCE_API_SECRET environment variables.")
+    raise ValueError("Please set API_KEY and API_SECRET in your .env file.")
 
-# Define the trading pair
+# Trading parameters
 symbol = 'SOLUSDT'
 timeframe = '15m'
-
-# Initialize buy_price as None
-buy_price = None
-
-# Initialize sell price variable
-sell_price = None
-           
-# Set to True for testing, False for live trading
 testing_mode = False
+buy_order_id = None
+sell_order_id = None
 
-# Initialize historical data
-historical_data = []
+# Function to calculate average fill price
+def get_average_fill_price(order):
+    fills = order.get('fills', [])
+    if not fills:
+        return 0
+    total_qty = 0
+    total_cost = 0
+    for fill in fills:
+        qty = float(fill['qty'])
+        price = float(fill['price'])
+        total_qty += qty
+        total_cost += qty * price
+    return total_cost / total_qty if total_qty > 0 else 0
 
+# Bollinger Bands calculation
+def bollinger_bands_strategy(df, window=10, num_std_dev=1):
+    df['rolling_mean'] = df['close'].rolling(window=window).mean()
+    df['rolling_std'] = df['close'].rolling(window=window).std()
+    df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)
+    df['lower_band'] = df['rolling_mean'] - (df['rolling_std'] * num_std_dev)
+    return df
+
+# Buy condition
+def buy_condition():
+    return df['close'].iloc[-1] <= 0.985 * df['lower_band'].iloc[-1]
+
+# Main trading loop
 while True:
     try:
-        # Fetch candlestick data for the trading pair
-        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=100)  # Fetch previous candles
-
-        # Extract the historical OHLCV data
-        historical_data = klines  # Exclude the last (current) candle
-        latest_ohlcv = klines  # The latest (current) candle
-
-        # Convert the data into a DataFrame
-        df = pd.DataFrame(historical_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
-
-        # Convert numeric columns to the appropriate data types
-        numeric_columns = ['open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume']
+        # Fetch klines and set up DataFrame
+        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=100)
+        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+        numeric_columns = ['open', 'high', 'low', 'close', 'volume']
         df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
-
-        # Set the timestamp as the index and convert to datetime
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
-
-        # Load the buy price from the file if it exists
-        if os.path.exists(""):
-            with open("", "r") as buy_price_file:
-               buy_price = json.load(buy_price_file)
-               print(f"Buy Price: {buy_price}")
-
-        # Load the sell price from the file if it exists
-        if os.path.exists("sell_price.json"):
-            with open("sell_price.json", "r") as sell_price_file:
-               sell_price = json.load(sell_price_file)
-               print(f"Sell Price: {sell_price}")      
-
-        # Define Bollinger Bands strategy
-        def bollinger_bands_strategy(df, window=10, num_std_dev=1):
-            df['rolling_mean'] = df['close'].rolling(window=window).mean()
-            df['rolling_std'] = df['close'].rolling(window=window).std()
-            df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)
-            df['lower_band'] = df['rolling_mean'] - (df['rolling_std'] * num_std_dev)
-            df['signal'] = 0  # 0 means do nothing
-            df.loc[(df['close'] <= df['lower_band']) & (df['close'] < df['rolling_mean']), 'signal'] = 1
-            return df
-
+        
+        # Apply Bollinger Bands
         df = bollinger_bands_strategy(df)
-
-        # Retrieve free USDT balance
+        
+        # Get free USDT balance
         free_usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
-
-        # Your buy and sell conditions
-        def buy_condition():
-            if df['close'].iloc[-1] <= 0.985 * df['lower_band'].iloc[-1]:
-                return True
-            else:
-                print(f"Wick Condition: {0.985 * df['lower_band'].iloc[-1]}")
-                print("Buy condition not met")
-            return False
-          
-        # Sell condition using "OR" gate logic
-        def sell_condition():
-            if buy_price is not None:
-                current_price = df['close'].iloc[-1]
-                buy_price_float = float(buy_price)
-                price_difference = (current_price - buy_price_float) / buy_price_float
-                if price_difference >= 0.012:           
-                    return True
-                else:
-                    print(f"Sell condition not met. Price Differnce: {price_difference}, Current Price: {df['close'].iloc[-1]}")
-                    return False
-            else:
-                print(f"Sell condition not met. Buy Price: {buy_price}, Current Price: {df['close'].iloc[-1]}")
-            return False
-
-        # Buy condition check
-        if buy_condition() and free_usdt_balance > 1:
+        
+        # Check buy order status
+        if buy_order_id is not None:
+            order = client.get_order(symbol=symbol, orderId=buy_order_id)
+            status = order['status']
+            if status == 'FILLED':
+                executed_qty = float(order['executedQty'])
+                if executed_qty > 0:
+                    avg_buy_price = get_average_fill_price(order)
+                    print(f"{Fore.GREEN}Buy order filled at {avg_buy_price} for {executed_qty} SOL{Style.RESET_ALL}")
+                    with open("buy_price.json", "w") as buy_price_file:
+                        json.dump(avg_buy_price, buy_price_file)
+                    
+                    # Calculate sell price for 1.2% profit
+                    sell_price = avg_buy_price * 1.012
+                    symbol_info = client.get_symbol_info(symbol)
+                    price_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'PRICE_FILTER')
+                    tick_size = float(price_filter['tickSize'])
+                    sell_price = round(sell_price / tick_size) * tick_size
+                    sell_price_str = f"{sell_price:.{len(str(tick_size).split('.')[1])}f}"
+                    
+                    # Use executed quantity for sell order
+                    lot_size_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE')
+                    step_size = float(lot_size_filter['stepSize'])
+                    qty_str = f"{executed_qty:.{len(str(step_size).split('.')[1])}f}"
+                    
+                    # Place limit sell order
+                    sell_order = client.create_order(
+                        symbol=symbol,
+                        side='SELL',
+                        type='LIMIT',
+                        timeInForce='GTC',
+                        quantity=qty_str,
+                        price=sell_price_str
+                    )
+                    sell_order_id = sell_order['orderId']
+                    print(f"{Fore.RED}Placed sell order {sell_order_id} at {sell_price_str}{Style.RESET_ALL}")
+                buy_order_id = None
+            elif status not in ['NEW', 'PARTIALLY_FILLED']:
+                print(f"Buy order {buy_order_id} no longer active: {status}")
+                buy_order_id = None
+        
+        # Check sell order status
+        elif sell_order_id is not None:
+            order = client.get_order(symbol=symbol, orderId=sell_order_id)
+            status = order['status']
+            if status == 'FILLED':
+                avg_sell_price = get_average_fill_price(order)
+                print(f"{Fore.RED}Sell order filled at {avg_sell_price}{Style.RESET_ALL}")
+                with open("sell_price.json", "w") as sell_price_file:
+                    json.dump(avg_sell_price, sell_price_file)
+                sell_order_id = None
+            elif status not in ['NEW', 'PARTIALLY_FILLED']:
+                print(f"Sell order {sell_order_id} no longer active: {status}")
+                sell_order_id = None
+        
+        # Place new buy order if condition met
+        elif buy_condition() and free_usdt_balance > 1:
             if testing_mode:
-                print(f"{Fore.GREEN}Simulating Buy Order{Style.RESET_ALL}")
-                print(f"{Fore.GREEN}Simulated Buy Price: {df['close'].iloc[-1]}{Style.RESET_ALL}") # Print the simulated buy price         
+                simulated_buy_price = df['close'].iloc[-2] * 0.995
+                print(f"{Fore.GREEN}Simulating Buy Order at {simulated_buy_price}{Style.RESET_ALL}")
                 with open("buy_price.json", "w") as buy_price_file:
-                    json.dump(df['close'].iloc[-1], buy_price_file)
+                    json.dump(simulated_buy_price, buy_price_file)
             else:
-                # Retrieve symbol info for 'Symbol'
-                symbol_info = client.get_symbol_info('SOLUSDT')
-
-                # Find the 'LOT_SIZE' filter
-                lot_size_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE'), None)
-                if lot_size_filter:
-                    # Extract the step size and precision from the filter
-                    quantity_step_size = float(lot_size_filter['stepSize'])
-                    max_precision = len(lot_size_filter['stepSize'].split('.')[1])  # Determine precision from stepSize
-                    
-                    # Get the current price of SOLUSDT
-                    solusdt_ticker = client.get_symbol_ticker(symbol='SOLUSDT')
-                    current_sol_price = float(solusdt_ticker['price'])
-                    
-                    # Get the available USDT balance
-                    usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
-                    
-                    # Calculate the maximum quantity you can buy with the available USDT balance
-                    max_quantity = usdt_balance / current_sol_price
-                    
-                    # Round down to the nearest valid multiple of stepSize
-                    quantity_to_buy = (max_quantity // quantity_step_size) * quantity_step_size
-                    
-                    # Adjust the quantity to match the maximum allowed precision
-                    quantity_to_buy = round(quantity_to_buy, max_precision)
-                    
-                    # Recalculate the actual USDT amount that will be spent
-                    usdt_spent = quantity_to_buy * current_sol_price
-                    
-                    # Ensure the calculated USDT spent does not exceed the available balance
-                    if usdt_spent > usdt_balance:
-                        raise ValueError("Calculated USDT spent exceeds available balance. Adjust logic.")
-                    
-                    print(f"Executing Buy Order: Quantity={quantity_to_buy}, Price={current_sol_price}, Total USDT Spent={usdt_spent}")
-                    
-                    # Place a real buy order here
+                symbol_info = client.get_symbol_info(symbol)
+                price_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'PRICE_FILTER')
+                lot_size_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE')
+                
+                tick_size = float(price_filter['tickSize'])
+                step_size = float(lot_size_filter['stepSize'])
+                price_precision = len(str(tick_size).split('.')[1].rstrip('0')) if '.' in str(tick_size) else 0
+                qty_precision = len(str(step_size).split('.')[1].rstrip('0')) if '.' in str(step_size) else 0
+                
+                last_closed_price = df['close'].iloc[-2]
+                target_buy_price = last_closed_price * 0.995
+                target_buy_price = round(target_buy_price / tick_size) * tick_size
+                target_buy_price_str = f"{target_buy_price:.{price_precision}f}"
+                
+                max_quantity = free_usdt_balance / target_buy_price
+                quantity_to_buy = (max_quantity // step_size) * step_size
+                quantity_to_buy_str = f"{quantity_to_buy:.{qty_precision}f}"
+                
+                if quantity_to_buy > 0:
+                    print(f"Placing Limit Buy Order: Quantity={quantity_to_buy_str}, Price={target_buy_price_str}")
                     order = client.create_order(
                         symbol=symbol,
                         side='BUY',
-                        type='MARKET',
-                        quantity=quantity_to_buy
+                        type='LIMIT',
+                        timeInForce='GTC',
+                        quantity=quantity_to_buy_str,
+                        price=target_buy_price_str
                     )
-                    print(f"{Fore.GREEN}Executing Buy Order: {order}{Style.RESET_ALL}")
-                    print(f"{Fore.GREEN}Buy Order Executed at Price: {buy_price}{Style.RESET_ALL}")
-                    buy_price = order['fills'][0]['price']  # Store the real buy price
-                    with open("buy_price.json", "w") as buy_price_file:
-                        json.dump(buy_price, buy_price_file)
+                    buy_order_id = order['orderId']
+                    print(f"{Fore.GREEN}Limit Buy Order Placed: {order}{Style.RESET_ALL}")
                 else:
-                    print("LOT_SIZE filter not found in symbol info.")
-
-                # Continue to the sell condition check
-                continue
-            
-        # Sell condition check
-        if sell_condition():
-            sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
-            if sol_balance > 0:
-                if testing_mode:
-                    print(f"{Fore.RED}Simulating Sell Order{Style.RESET_ALL}")
-                    print(f"{Fore.RED}Simulated Sell Price:{df['close'].iloc[-1]}{Style.RESET_ALL}")  # Print the simulated sell price
-                    buy_price = None  # Reset the buy price after selling
-                    with open("buy_price.json", "w") as buy_price_file:
-                        json.dump(buy_price, buy_price_file)
-                else:
-                    # Retrieve symbol info for 'Symbol'
-                    symbol_info = client.get_symbol_info('SOLUSDT')
-
-                    # Find the 'LOT_SIZE' filter
-                    lot_size_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE'), None)
-                    if lot_size_filter:
-                        # Extract the step size and precision from the filter
-                        quantity_step_size = float(lot_size_filter['stepSize'])
-                        max_precision = len(lot_size_filter['stepSize'].split('.')[1])  # Determine precision from stepSize
-                        
-                        # Get the available SOL balance
-                        sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
-                        
-                        # Round down to the nearest valid multiple of stepSize
-                        quantity_to_sell = (sol_balance // quantity_step_size) * quantity_step_size
-                        
-                        # Adjust the quantity to match the maximum allowed precision
-                        quantity_to_sell = round(quantity_to_sell, max_precision)
-                        
-                        # Ensure the quantity is greater than zero (to avoid invalid orders)
-                        if quantity_to_sell <= 0:
-                            raise ValueError("No SOL available to sell or quantity is too small.")
-                        
-                        print(f"Executing Sell Order: Quantity={quantity_to_sell}")
-                        
-                        # Place a real sell order here
-                        order = client.create_order(
-                            symbol=symbol,
-                            side='SELL',
-                            type='MARKET',
-                            quantity=quantity_to_sell
-                        )
-                        print(f"{Fore.RED}Sell Order Executed: {order}{Style.RESET_ALL}")
-                        print(f"{Fore.RED}Sell Order Executed at Price: {order['fills'][0]['price']}{Style.RESET_ALL}")
-                        sell_price = order['fills'][0]['price'] # Store the real sell price
-                        with open("sell_price.json", "w") as sell_price_file:
-                            json.dump(sell_price, sell_price_file)
-                        buy_price = None  # Reset the buy price after selling
-                        with open("buy_price.json", "w") as buy_price_file:
-                            json.dump(buy_price, buy_price_file)
-                    else:
-                        print("LOT_SIZE filter not found in symbol info.")
-
-        # Sleep for a while (you can adjust the interval)
-        print(f"{Fore.BLUE}Sleeping for 1 seconds{Style.RESET_ALL}")
-        time.sleep(1)  # Sleep for 1 seconds                    
-
+                    print("Insufficient balance to place buy order.")
+        
+        print(f"{Fore.BLUE}Sleeping for 1 second{Style.RESET_ALL}")
+        time.sleep(1)
+    
     except Exception as e:
-        print("Error:", e)
+        print(f"Error: {e}")
+        time.sleep(1)
 
 
 

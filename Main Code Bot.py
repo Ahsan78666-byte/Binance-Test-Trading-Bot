@@ -58,7 +58,7 @@ def get_average_fill_price(order):
 while True:
     try:
         # Fetch candlestick data for the trading pair
-        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=60)  # Fetch previous candles
+        klines = client.get_klines(symbol=symbol, interval=timeframe, limit=100)  # Fetch previous candles
 
         # Extract the historical OHLCV data
         historical_data = klines  # Exclude the last (current) candle

@@ -41,6 +41,9 @@ historical_data = []
 # Initialize sell_order_id to track the limit sell order
 sell_order_id = None
 
+# Initialize buy_order_id to track pending buy limit order
+buy_order_id = None
+
 # Function to calculate average fill price from order fills
 def get_average_fill_price(order):
     fills = order.get('fills', [])
@@ -54,6 +57,25 @@ def get_average_fill_price(order):
         total_qty += qty
         total_cost += qty * price
     return total_cost / total_qty if total_qty > 0 else 0
+
+# Define Bollinger Bands strategy
+def bollinger_bands_strategy(df, window=10, num_std_dev=1):
+    df['rolling_mean'] = df['close'].rolling(window=window).mean()
+    df['rolling_std'] = df['close'].rolling(window=window).std()
+    df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)
+    df['lower_band'] = df['rolling_mean'] - (df['rolling_std'] * num_std_dev)
+    df['signal'] = 0  # 0 means do nothing
+    df.loc[(df['close'] <= df['lower_band']) & (df['close'] < df['rolling_mean']), 'signal'] = 1
+    return df
+
+# Buy condition function: checks if the current close is below 98.5% of the lower Bollinger Band
+def buy_condition():
+    if df['close'].iloc[-1] <= 0.99 * df['lower_band'].iloc[-1]:
+        return True
+    else:
+        print(f"Wick Condition: {0.99 * df['lower_band'].iloc[-1]}")
+        print("Buy condition not met")
+    return False
 
 while True:
     try:
@@ -75,6 +97,9 @@ while True:
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
 
+        # Apply Bollinger Bands strategy
+        df = bollinger_bands_strategy(df)
+
         # Load the buy price from the file if it exists
         if os.path.exists("buy_price.json"):
             with open("buy_price.json", "r") as buy_price_file:
@@ -87,29 +112,48 @@ while True:
                 sell_price = json.load(sell_price_file)
                 print(f"Sell Price: {sell_price}")
 
-        # Define Bollinger Bands strategy
-        def bollinger_bands_strategy(df, window=10, num_std_dev=1):
-            df['rolling_mean'] = df['close'].rolling(window=window).mean()
-            df['rolling_std'] = df['close'].rolling(window=window).std()
-            df['upper_band'] = df['rolling_mean'] + (df['rolling_std'] * num_std_dev)
-            df['lower_band'] = df['rolling_mean'] - (df['rolling_std'] * num_std_dev)
-            df['signal'] = 0  # 0 means do nothing
-            df.loc[(df['close'] <= df['lower_band']) & (df['close'] < df['rolling_mean']), 'signal'] = 1
-            return df
-
-        df = bollinger_bands_strategy(df)
-
         # Retrieve free USDT balance
         free_usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
 
-        # Buy condition
-        def buy_condition():
-            if df['close'].iloc[-1] <= 0.985 * df['lower_band'].iloc[-1]:
-                return True
-            else:
-                print(f"Wick Condition: {0.985 * df['lower_band'].iloc[-1]}")
-                print("Buy condition not met")
-            return False
+        # Check pending buy order status if one exists
+        if buy_order_id is not None:
+            try:
+                order = client.get_order(symbol=symbol, orderId=buy_order_id)
+                status = order['status']
+                if status == 'FILLED':
+                    avg_buy_price = get_average_fill_price(order)
+                    print(f"{Fore.GREEN}Buy order filled at Price: {avg_buy_price}{Style.RESET_ALL}")
+                    with open("buy_price.json", "w") as buy_price_file:
+                        json.dump(avg_buy_price, buy_price_file)
+                    buy_order_id = None
+
+                    # Now place sell limit order
+                    symbol_info = client.get_symbol_info(symbol)
+                    price_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'PRICE_FILTER')
+                    tick_size = float(price_filter['tickSize'])
+                    sell_price_target = avg_buy_price * 1.012
+                    sell_price = round(sell_price_target / tick_size) * tick_size
+                    sell_price_str = f"{sell_price:.{len(str(tick_size).split('.')[1])}f}"
+                    executed_qty = float(order['executedQty'])
+                    lot_size_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE'), None)
+                    max_precision = len(lot_size_filter['stepSize'].split('.')[1]) if lot_size_filter else 8
+                    qty_str = f"{executed_qty:.{max_precision}f}"
+                    sell_order = client.create_order(
+                        symbol=symbol,
+                        side='SELL',
+                        type='LIMIT',
+                        timeInForce='GTC',
+                        quantity=qty_str,
+                        price=sell_price_str
+                    )
+                    sell_order_id = sell_order['orderId']
+                    print(f"{Fore.RED}Placed sell limit order {sell_order_id} at {sell_price_str}{Style.RESET_ALL}")
+                elif status not in ['NEW', 'PARTIALLY_FILLED']:
+                    print(f"Buy order {buy_order_id} no longer active: {status}")
+                    buy_order_id = None
+            except Exception as e:
+                print(f"Error checking buy order: {e}")
+                buy_order_id = None
 
         # Check sell order status if one exists
         if sell_order_id is not None:
@@ -132,20 +176,21 @@ while True:
                 print(f"Error checking sell order: {e}")
                 sell_order_id = None
 
-        # Buy condition check and place sell limit order immediately after
-        elif buy_condition() and free_usdt_balance > 1 and sell_order_id is None:
+        # Buy condition check and place buy limit order if no pending buy order exists
+        elif buy_order_id is None and buy_condition() and free_usdt_balance > 1 and sell_order_id is None:
             if testing_mode:
-                print(f"{Fore.GREEN}Simulating Buy Order{Style.RESET_ALL}")
-                simulated_buy_price = df['close'].iloc[-1]
-                print(f"{Fore.GREEN}Simulated Buy Price: {simulated_buy_price}{Style.RESET_ALL}")
+                # Simulate a buy limit order placed exactly below the trigger price
+                simulated_tick = 0.0001  # Simulated tick size for testing
+                simulated_buy_price = df['close'].iloc[-1] - simulated_tick
+                print(f"{Fore.GREEN}Simulating Buy Limit Order at Price: {simulated_buy_price}{Style.RESET_ALL}")
                 buy_price = simulated_buy_price
                 with open("buy_price.json", "w") as buy_price_file:
                     json.dump(buy_price, buy_price_file)
-                # Simulate placing sell limit order
+                # Immediately simulate placing sell limit order
                 sell_price_target = buy_price * 1.012
                 print(f"{Fore.RED}Simulating placing sell limit order at {sell_price_target}{Style.RESET_ALL}")
             else:
-                # Retrieve symbol info for 'Symbol'
+                # Retrieve symbol info for 'SOLUSDT'
                 symbol_info = client.get_symbol_info('SOLUSDT')
 
                 # Find the 'LOT_SIZE' filter
@@ -178,47 +223,25 @@ while True:
                     if usdt_spent > usdt_balance:
                         raise ValueError("Calculated USDT spent exceeds available balance. Adjust logic.")
 
-                    print(f"Executing Buy Order: Quantity={quantity_to_buy}, Price={current_sol_price}, Total USDT Spent={usdt_spent}")
+                    print(f"Placing Buy Limit Order: Quantity={quantity_to_buy}, Current Price={current_sol_price}, Total USDT Spent={usdt_spent}")
 
-                    # Place a real buy order
+                    # Retrieve the PRICE_FILTER to get tick size for setting the buy limit price
+                    price_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'PRICE_FILTER')
+                    tick_size = float(price_filter['tickSize'])
+                    # Place the buy limit order exactly one tick below the trigger price
+                    buy_limit_price = current_sol_price - tick_size
+                    buy_limit_price_str = f"{buy_limit_price:.{len(str(tick_size).split('.')[1])}f}"
+
                     order = client.create_order(
                         symbol=symbol,
                         side='BUY',
-                        type='MARKET',
-                        quantity=quantity_to_buy
+                        type='LIMIT',
+                        timeInForce='GTC',
+                        quantity=quantity_to_buy,
+                        price=buy_limit_price_str
                     )
-                    print(f"{Fore.GREEN}Executing Buy Order: {order}{Style.RESET_ALL}")
-                    if order['status'] == 'FILLED':
-                        executed_qty = float(order['executedQty'])
-                        avg_buy_price = get_average_fill_price(order)
-                        print(f"{Fore.GREEN}Buy Order Executed at Price: {avg_buy_price}{Style.RESET_ALL}")
-                        buy_price = avg_buy_price
-                        with open("buy_price.json", "w") as buy_price_file:
-                            json.dump(buy_price, buy_price_file)
-
-                        # Calculate sell price for 1.2% profit
-                        sell_price_target = avg_buy_price * 1.012
-                        price_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'PRICE_FILTER')
-                        tick_size = float(price_filter['tickSize'])
-                        sell_price = round(sell_price_target / tick_size) * tick_size
-                        sell_price_str = f"{sell_price:.{len(str(tick_size).split('.')[1])}f}"
-
-                        # Format quantity for sell order
-                        qty_str = f"{executed_qty:.{max_precision}f}"
-
-                        # Place limit sell order
-                        sell_order = client.create_order(
-                            symbol=symbol,
-                            side='SELL',
-                            type='LIMIT',
-                            timeInForce='GTC',
-                            quantity=qty_str,
-                            price=sell_price_str
-                        )
-                        sell_order_id = sell_order['orderId']
-                        print(f"{Fore.RED}Placed sell limit order {sell_order_id} at {sell_price_str}{Style.RESET_ALL}")
-                    else:
-                        print(f"Buy order not filled immediately: status {order['status']}")
+                    buy_order_id = order['orderId']
+                    print(f"{Fore.GREEN}Placed buy limit order {buy_order_id} at {buy_limit_price_str}{Style.RESET_ALL}")
                 else:
                     print("LOT_SIZE filter not found in symbol info.")
 

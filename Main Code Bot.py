@@ -102,7 +102,7 @@ while True:
 
         # Define buy condition based on Bollinger Bands
         def buy_condition():
-            target_price = 0.985 * df['lower_band'].iloc[-1]
+            target_price = 0.99 * df['lower_band'].iloc[-1]
             if df['close'].iloc[-1] <= target_price:
                 return True
             else:
@@ -200,7 +200,7 @@ while True:
         elif buy_condition() and free_usdt_balance > 1 and sell_order_id is None and buy_order_id is None:
             if testing_mode:
                 print(f"{Fore.GREEN}Simulating Limit Buy Order{Style.RESET_ALL}")
-                simulated_buy_price = 0.985 * df['lower_band'].iloc[-1]
+                simulated_buy_price = 0.99 * df['lower_band'].iloc[-1]
                 print(f"{Fore.GREEN}Simulated Buy Price: {simulated_buy_price}{Style.RESET_ALL}")
                 buy_price = simulated_buy_price
                 with open("buy_price.json", "w") as buy_price_file:
@@ -216,7 +216,7 @@ while True:
 
                 # Calculate limit price
                 lower_band = df['lower_band'].iloc[-1]
-                limit_price = 0.985 * lower_band
+                limit_price = 0.99 * lower_band
                 limit_price = round(limit_price / tick_size) * tick_size
                 limit_price_str = f"{limit_price:.{price_precision}f}"
 

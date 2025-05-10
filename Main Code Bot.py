@@ -103,9 +103,9 @@ while True:
         df_closed = df.iloc[:-1].copy()  # Exclude ongoing candle
         df_closed = bollinger_bands_strategy(df_closed)
 
-        # Fetch current price
-        current_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
-        print(f"Current Price: {current_price}")
+        # Fetch current price from the in-progress 15m candle
+        current_price = df['close'].iloc[-1]
+        print(f"Current Price (in-progress candle): {current_price}")
 
         # Get USDT balance
         free_usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])
@@ -153,7 +153,6 @@ while True:
                             position_open = False
                             save_state(buy_price, position_open)
                             print(f"{Fore.RED}Sell Executed at {sell_price}{Style.RESET_ALL}")
-                            # Auto-reset: Fresh data fetched in next iteration
                         else:
                             print("No SOL to sell.")
                     else:
@@ -165,3 +164,4 @@ while True:
     except Exception as e:
         print(f"Error: {e}")
         time.sleep(1)
+

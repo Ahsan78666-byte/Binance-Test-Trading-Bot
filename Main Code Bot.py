@@ -42,7 +42,7 @@ def load_state():
                 state = json.load(f)
                 buy_price = state.get("buy_price")
                 if buy_price is not None:
-                    buy_price = float(buy_price)
+                    buy_price = float(buy_price)  # Ensure buy_price is a float
                 position_open = bool(state.get("position_open", False))
                 return {"buy_price": buy_price, "position_open": position_open}
         return default_state
@@ -57,13 +57,6 @@ def save_state(buy_price, position_open):
             json.dump({"buy_price": buy_price, "position_open": position_open}, f)
     except IOError as e:
         print(f"Error saving state: {e}")
-
-def reset_state():
-    """Reset trading state after a sell trade."""
-    global buy_price, position_open
-    buy_price = None
-    position_open = False
-    save_state(buy_price, position_open)
 
 ### Trading Strategy Functions
 def bollinger_bands_strategy(df, window=10, num_std_dev=1):
@@ -131,7 +124,7 @@ while True:
                     max_precision = len(lot_size_filter['stepSize'].split('.')[1])
 
                     # Get current price for quantity calculation
-                    current_sol_price = float(client.get_symbol_ticker(symbol)['price'])
+                    current_sol_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
 
                     # Calculate quantity to buy
                     max_quantity = free_usdt_balance / current_sol_price
@@ -157,7 +150,9 @@ while True:
                 if testing_mode:
                     print(f"{Fore.RED}Simulating Sell Order{Style.RESET_ALL}")
                     print(f"{Fore.RED}Simulated Sell Price: {current_price}{Style.RESET_ALL}")
-                    reset_state()
+                    buy_price = None
+                    position_open = False
+                    save_state(buy_price, position_open)
                 else:
                     sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
                     if sol_balance > 0:
@@ -177,7 +172,9 @@ while True:
                                 quantity=quantity_to_sell
                             )
                             sell_price = float(order['fills'][0]['price'])
-                            reset_state()
+                            buy_price = None
+                            position_open = False
+                            save_state(buy_price, position_open)
                             print(f"{Fore.RED}Sell Order Executed at Price: {sell_price}{Style.RESET_ALL}")
                         else:
                             print("No SOL to sell or quantity too small.")

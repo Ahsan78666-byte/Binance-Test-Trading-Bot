@@ -59,7 +59,7 @@ def save_state(buy_price, position_open):
         print(f"Error saving state: {e}")
 
 ### Trading Strategy Functions
-def bollinger_bands_strategy(df, window=10, num_std_dev=1):
+def bollinger_bands_strategy(df, window=20, num_std_dev=1):
     """Calculate Bollinger Bands on the DataFrame."""
     df['rolling_mean'] = df['close'].rolling(window=window).mean()
     df['rolling_std'] = df['close'].rolling(window=window).std()

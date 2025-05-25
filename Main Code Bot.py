@@ -117,48 +117,36 @@ while True:
                 with open("buy_price.json", "w") as buy_price_file:
                     json.dump(df['close'].iloc[-1], buy_price_file)
             else:
-                # Retrieve symbol info for 'Symbol'
-                symbol_info = client.get_symbol_info('SOLUSDT')
-
-                # Find the 'LOT_SIZE' filter
-                lot_size_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE'), None)
-
-                if lot_size_filter:
-                    # Extract the step size and precision from the filter
+                    # Get symbol info for quantity precision
+                    symbol_info = client.get_symbol_info(symbol)
+                    lot_size_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE')
                     quantity_step_size = float(lot_size_filter['stepSize'])
-                    max_precision = len(lot_size_filter['maxQty'].split('.')[1])
+                    max_precision = len(lot_size_filter['stepSize'].split('.')[1])
 
-                    # Calculate the quantity based on available USDT balance
-                    solusdt_ticker = client.get_symbol_ticker(symbol='SOLUSDT')
-                    current_sol_price = float(solusdt_ticker['price'])
-                    usdt_balance = float(client.get_asset_balance(asset='USDT')['free'])    
-                    quantity_to_buy = usdt_balance / current_sol_price
+                    # Get current price for quantity calculation
+                    current_sol_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
+
+                    # Calculate quantity to buy
                     max_quantity = free_usdt_balance / current_sol_price
-
-                    # Ensure the quantity adheres to Binance's rules for step size
                     quantity_to_buy = (max_quantity // quantity_step_size) * quantity_step_size
-
-                    # Adjust the quantity to match the maximum allowed precision
                     quantity_to_buy = round(quantity_to_buy, max_precision)
-                
-                    print("Executing Buy Order")
-                    # Place a real buy order here
-                    order = client.create_order(
-                        symbol=symbol,
-                        side='BUY',
-                        type='MARKET',
-                        quantity=quantity_to_buy
-                    )
-                    print(f"{Fore.GREEN}Executing Buy Order: {order}{Style.RESET_ALL}")
-                    print(f"{Fore.GREEN}Buy Order Executed at Price: {buy_price}{Style.RESET_ALL}")
-                    buy_price = order['fills'][0]['price']  # Store the real buy price
-                    with open("buy_price.json", "w") as buy_price_file:
-                        json.dump(buy_price, buy_price_file)
-                else:
-                    print("LOT_SIZE filter not found in symbol info.")
+
+                    if quantity_to_buy > 0:
+                        order = client.create_order(
+                            symbol=symbol,
+                            side='BUY',
+                            type='MARKET',
+                            quantity=quantity_to_buy
+                        )
+                        buy_price = float(order['fills'][0]['price'])
+                        position_open = True
+                        json.dump(buy_price, position_open)
+                        print(f"{Fore.GREEN}Buy Order Executed at Price: {buy_price}{Style.RESET_ALL}")
+                    else:
+                        print("Insufficient USDT balance to buy.")
 
                 # Continue to the sell condition check
-                continue
+                    continue
             
         # Sell condition check
         if sell_condition():
@@ -171,49 +159,41 @@ while True:
                     with open("buy_price.json", "w") as buy_price_file:
                         json.dump(buy_price, buy_price_file)
                 else:
-                    # Retrieve symbol info for 'Symbol'
-                    symbol_info = client.get_symbol_info('SOLUSDT')
-
-                    # Find the 'LOT_SIZE' filter
-                    lot_size_filter = next((f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE'), None)
-
-                    if lot_size_filter:
-                        # Extract the step size and precision from the filter
+                    sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
+                    if sol_balance > 0:
+                        # Reuse quantity precision from symbol info
+                        symbol_info = client.get_symbol_info(symbol)
+                        lot_size_filter = next(f for f in symbol_info['filters'] if f['filterType'] == 'LOT_SIZE')
                         quantity_step_size = float(lot_size_filter['stepSize'])
-                        max_precision = len(lot_size_filter['maxQty'].split('.')[1])
+                        max_precision = len(lot_size_filter['stepSize'].split('.')[1])
 
-                        # Calculate the quantity based on available balance
-                        sol_balance = float(client.get_asset_balance(asset='SOL')['free'])
-                        quantity_to_sell = sol_balance
-
-                        # Ensure the quantity adheres to Binance's rules for step size
                         quantity_to_sell = (sol_balance // quantity_step_size) * quantity_step_size
-
-                        # Adjust the quantity to match the maximum allowed precision
                         quantity_to_sell = round(quantity_to_sell, max_precision)
-
-                        print("{Fore.RED}Executing Sell Order{Style.RESET_ALL}")
-                        # Place a real sell order here
-                        order = client.create_order(
-                            symbol=symbol,
-                            side='SELL',
-                            type='MARKET',
-                            quantity=quantity_to_sell
-                        )
-                        print(f"{Fore.RED}Sell Order Executed: {order}{Style.RESET_ALL}")
-                        print(f"{Fore.RED}Sell Order Executed at Price: {order['fills'][0]['price']}{Style.RESET_ALL}")
-                        sell_price = order['fills'][0]['price'] # Store the real sell price
-                        with open("sell_price.json", "w") as sell_price_file:
-                            json.dump(sell_price, sell_price_file)
-                        buy_price = None  # Reset the buy price after selling
-                        with open("buy_price.json", "w") as buy_price_file:
-                            json.dump(buy_price, buy_price_file)
+                        if quantity_to_sell > 0:
+                            order = client.create_order(
+                                symbol=symbol,
+                                side='SELL',
+                                type='MARKET',
+                                quantity=quantity_to_sell
+                            )
+                            sell_price = float(order['fills'][0]['price'])
+                            buy_price = None
+                            position_open = False
+                            json.dump(buy_price, position_open)
+                            print(f"{Fore.RED}Sell Order Executed at Price: {sell_price}{Style.RESET_ALL}")
+                        else:
+                            print("No SOL to sell or quantity too small.")
                     else:
-                        print("LOT_SIZE filter not found in symbol info.")
-
+                        print("No SOL balance to sell.")
         # Sleep for a while (you can adjust the interval)
         print(f"{Fore.BLUE}Sleeping for 1 seconds{Style.RESET_ALL}")
         time.sleep(1)  # Sleep for 0 seconds                    
 
     except Exception as e:
         print("Error:", e)
+
+
+
+
+
+

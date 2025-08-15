@@ -38,6 +38,9 @@ sell_price = None
 # Testing mode switch
 testing_mode = False
 
+# Initialize historical data
+historical_data = []
+
 def load_price(file_path):
     if os.path.exists(file_path):
         try:
@@ -103,23 +106,19 @@ while True:
     try:
         # Fetch klines (candles). We fetch 101 to exclude current candle
         klines = client.get_klines(symbol=symbol, interval=timeframe, limit=101)
-        # Exclude the last candle (current forming candle)
-        historical_klines = klines[:-1]
+        
+        # Extract the historical OHLCV data
+        historical_data = klines  # Exclude the last (current) candle
+        latest_ohlcv = klines  # The latest (current) candle
+        
+        # Convert the data into a DataFrame
+        df = pd.DataFrame(historical_data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
 
-        # Create DataFrame
-        df = pd.DataFrame(historical_klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'quote_asset_volume', 'number_of_trades',
-            'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
-        ])
+        # Convert numeric columns to the appropriate data types
+        numeric_columns = ['open', 'high', 'low', 'close', 'volume', 'close_time', 'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume']
+        df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
 
-        # Convert columns to numeric
-        numeric_cols = ['open', 'high', 'low', 'close', 'volume',
-                        'close_time', 'quote_asset_volume', 'number_of_trades',
-                        'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume']
-        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
-
-        # Timestamp conversion and indexing
+        # Set the timestamp as the index and convert to datetime
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
 
@@ -226,6 +225,7 @@ while True:
         print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
         # Avoid tight loop on error
         time.sleep(2)
+
 
 
 

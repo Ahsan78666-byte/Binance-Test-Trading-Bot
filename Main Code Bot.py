@@ -16,11 +16,11 @@ init()
 API_KEY = os.environ.get('API_KEY')
 API_SECRET = os.environ.get('API_SECRET')
 
-# Initialize the Binance client
-client = Client(API_KEY, API_SECRET, testnet=True)
-
 if not API_KEY or not API_SECRET:
     raise ValueError("Please set BINANCE_API_KEY and BINANCE_API_SECRET environment variables.")
+
+# Initialize the Binance client
+client = Client(API_KEY, API_SECRET)
 
 # Define the trading pair
 symbol = 'SOLUSDT'
@@ -248,7 +248,4 @@ while True:
 
     except Exception as e:
         print("Error:", e)
-
-
-
 
